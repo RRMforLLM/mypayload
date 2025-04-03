@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Matrix Effect</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                background-color: black;
+                overflow: hidden;
+                font-family: monospace;
+                color: #00ff00;
+            }
+            
+            #matrix-canvas {
+                display: block;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+            
+            .status-bar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                background-color: rgba(0, 0, 0, 0.7);
+                color: #888;
+                padding: 5px 10px;
+                font-size: 14px;
+                z-index: 100;
+            }
+            
+            .message {
+                position: absolute;
+                color: #ffff00;
+                font-weight: bold;
+                text-shadow: 0 0 5px #ffff00;
+                z-index: 50;
+            }
+            
+            .decryption-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: black;
+                color: #00ff00;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+                font-family: monospace;
+                padding: 20px;
+            }
+            
+            .decryption-line {
+                margin: 5px 0;
+                width: 100%;
+                max-width: 800px;
+            }
+            
+            .binary-line {
+                font-size: 14px;
+                letter-spacing: 2px;
+                margin-bottom: 10px;
+                opacity: 0.7;
+            }
+            
+            .controls {
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                background-color: rgba(0, 0, 0, 0.7);
+                padding: 10px;
+                border-radius: 5px;
+                z-index: 100;
+                color: #888;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="matrix-canvas"></canvas>
+        
+        <div class="status-bar">
+            FPS: <span id="fps">0</span> | 
+            Columns: <span id="active-columns">0</span>/<span id="total-columns">0</span> | 
+            Glitches: <span id="glitches">0</span> | 
+            Event: <span id="current-event">None</span>
+        </div>
+        
+        <div class="controls">
+            Controls: <br>
+            G = Toggle Glitch<br>
+            W = Toggle Waves<br>
+            M = Toggle Messages<br>
+            C = Trigger Event<br>
+            Q = Quit Animation
+        </div>
+        
+        <div class="decryption-overlay" id="decryption-overlay">
+            <div id="decryption-content"></div>
+        </div>
+        
+        <script>
+            class MatrixEngine {
+                constructor() {
+                    this.canvas = document.getElementById('matrix-canvas');
+                    this.ctx = this.canvas.getContext('2d');
+                    
+                    this.width = 0;
+                    this.height = 0;
+                    this.columns = [];
+                    this.fontSize = 15;
+                    this.lastTime = 0;
+                    this.frameTime = 0;
+                    this.frameTimes = [];
+                    this.messageElement = null;
+                    
+                    // Similar to the Python code's character sets
+                    this.matrixChars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'];
+                    this.kanjiChars = ['日', '月', '火', '水', '木', '金', '土', '円', '年', '月', '日', '時', '分', '秒', '円'];
+                    this.cyrillicChars = ['Ж', 'Ф', 'Ц', 'Ч', 'Ш', 'Щ', 'Э', 'Ю', 'Я', 'Д', 'Л', 'Б', 'Ь'];
+                    this.specialChars = ['ϟ', 'ζ', 'Ω', 'λ', 'μ', 'π', 'φ', 'Σ', 'Δ', '¥', '€', '$', '¢', '£', '∞', '≈', '≠', '≤', '≥', '±', '÷', '×'];
+                    
+                    // Special effects
+                    this.glitchEnabled = true;
+                    this.frequencyWaves = true;
+                    this.messageReveal = true;
+                    
+                    // Hidden messages
+                    this.hiddenMessages = [
+                        "WAKE UP NEO",
+                        "THE MATRIX HAS YOU",
+                        "FOLLOW THE WHITE RABBIT",
+                        "KNOCK KNOCK",
+                        "THERE IS NO SPOON",
+                        "SYSTEM FAILURE",
+                        "ACCESS GRANTED",
+                        "DECRYPTION COMPLETE",
+                        "MAINFRAME BREACHED"
+                    ];
+                    
+                    // Animation state
+                    this.glitchPoints = [];
+                    this.waveOffset = 0;
+                    this.messageTimer = 0;
+                    this.currentMessage = null;
+                    this.messagePosition = null;
+                    this.revealProgress = 0;
+                    
+                    // Event systems
+                    this.events = [{type: 'initialization', time: Date.now(), description: 'Matrix initialized'}];
+                    this.eventTimer = 0;
+                    
+                    // Character palette system
+                    this.palettes = {
+                        'default': {chars: this.matrixChars, probability: 0.7},
+                        'kanji': {chars: this.kanjiChars, probability: 0.1},
+                        'cyrillic': {chars: this.cyrillicChars, probability: 0.1},
+                        'special': {chars: this.specialChars, probability: 0.1}
+                    };
+                    
+                    // Initialize
+                    this.resizeCanvas();
+                    window.addEventListener('resize', () => this.resizeCanvas());
+                    
+                    // Key bindings
+                    document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+                }
+                
+                resizeCanvas() {
+                    this.canvas.width = window.innerWidth;
+                    this.canvas.height = window.innerHeight;
+                    this.width = Math.ceil(this.canvas.width / this.fontSize);
+                    this.height = Math.ceil(this.canvas.height / this.fontSize);
+                    this.initializeColumns();
+                }
+                
+                selectChar() {
+                    // Select character palette based on probability
+                    const r = Math.random();
+                    let cumulative = 0;
+                    let selectedPalette = this.matrixChars;
+                    
+                    for (const palette of Object.values(this.palettes)) {
+                        cumulative += palette.probability;
+                        if (r <= cumulative) {
+                            selectedPalette = palette.chars;
+                            break;
+                        }
+                    }
+                    
+                    return selectedPalette[Math.floor(Math.random() * selectedPalette.length)];
+                }
+                
+                initializeColumns() {
+                    this.columns = [];
+                    for (let i = 0; i < this.width; i++) {
+                        const column = {
+                            position: Math.random() < 0.5 ? -Math.floor(Math.random() * 20) : 0,
+                            speed: Math.random() * 2.5 + 0.5,
+                            density: Math.floor(Math.random() * 20) + 5,
+                            charChangeProb: Math.random() * 0.2 + 0.1,
+                            brightness: Math.random() * 0.3 + 0.7,
+                            chars: Array(50).fill().map(() => this.selectChar()),
+                            palette: this.getRandomKey(this.palettes),
+                            active: Math.random() < 0.5
+                        };
+                        this.columns.push(column);
+                    }
+                    
+                    // Update status bar
+                    document.getElementById('total-columns').textContent = this.columns.length;
+                }
+                
+                getRandomKey(obj) {
+                    const keys = Object.keys(obj);
+                    return keys[Math.floor(Math.random() * keys.length)];
+                }
+                
+                updateMatrix(deltaTime) {
+                    // Update wave effect
+                    this.waveOffset += deltaTime * 2.0;
+                    
+                    // Update columns
+                    for (let i = 0; i < this.columns.length; i++) {
+                        const column = this.columns[i];
+                        
+                        if (!column.active && Math.random() < 0.02) {
+                            column.active = true;
+                            column.position = 0;
+                        }
+                        
+                        if (column.active) {
+                            // Update position based on speed and deltaTime
+                            column.position += column.speed * deltaTime * 15;
+                            
+                            // Randomly change characters in the stream
+                            for (let j = 0; j < column.chars.length; j++) {
+                                if (Math.random() < column.charChangeProb * deltaTime * 10) {
+                                    column.chars[j] = this.selectChar();
+                                }
+                            }
+                            
+                            // Reset column if it goes off screen
+                            if (column.position > this.height + column.density) {
+                                if (Math.random() < 0.2) { // 20% chance to deactivate
+                                    column.active = false;
+                                } else {
+                                    column.position = -Math.floor(Math.random() * 20);
+                                    column.speed = Math.random() * 2.5 + 0.5;
+                                    column.density = Math.floor(Math.random() * 20) + 5;
+                                    column.palette = this.getRandomKey(this.palettes);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Update glitch effect
+                    if (this.glitchEnabled) {
+                        // Randomly create new glitch points
+                        if (Math.random() < 0.05) {
+                            const newGlitch = {
+                                x: Math.floor(Math.random() * this.width),
+                                y: Math.floor(Math.random() * this.height),
+                                width: Math.floor(Math.random() * 12) + 3,
+                                height: Math.floor(Math.random() * 2) + 1,
+                                duration: Math.random() * 0.4 + 0.1,
+                                timer: 0,
+                                shift: Math.floor(Math.random() * 11) - 5
+                            };
+                            this.glitchPoints.push(newGlitch);
+                        }
+                        
+                        // Update existing glitch points
+                        for (let i = this.glitchPoints.length - 1; i >= 0; i--) {
+                            this.glitchPoints[i].timer += deltaTime;
+                            if (this.glitchPoints[i].timer >= this.glitchPoints[i].duration) {
+                                this.glitchPoints.splice(i, 1);
+                            }
+                        }
+                    }
+                    
+                    // Handle message reveal
+                    if (this.messageReveal) {
+                        this.messageTimer += deltaTime;
+                        
+                        // Start a new message reveal
+                        if (this.currentMessage === null && Math.random() < 0.005) {
+                            this.currentMessage = this.hiddenMessages[Math.floor(Math.random() * this.hiddenMessages.length)];
+                            this.messagePosition = {
+                                x: Math.floor(Math.random() * (this.width - this.currentMessage.length - 10)) + 5,
+                                y: Math.floor(Math.random() * (this.height - 10)) + 5
+                            };
+                            this.revealProgress = 0;
+                            
+                            // Create or update message element
+                            if (this.messageElement) {
+                                document.body.removeChild(this.messageElement);
+                            }
+                            this.messageElement = document.createElement('div');
+                            this.messageElement.className = 'message';
+                            this.messageElement.style.left = (this.messagePosition.x * this.fontSize) + 'px';
+                            this.messageElement.style.top = (this.messagePosition.y * this.fontSize) + 'px';
+                            document.body.appendChild(this.messageElement);
+                        }
+                        
+                        // Update ongoing message reveal
+                        if (this.currentMessage !== null) {
+                            this.revealProgress += deltaTime * 5;
+                            if (this.revealProgress >= this.currentMessage.length + 3) { // +3 for additional display time
+                                this.currentMessage = null;
+                                if (this.messageElement) {
+                                    document.body.removeChild(this.messageElement);
+                                    this.messageElement = null;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Handle special events
+                    this.eventTimer += deltaTime;
+                    if (this.eventTimer > 5 && Math.random() < 0.01) { // Trigger event every ~5-10 seconds
+                        this.triggerSpecialEvent();
+                        this.eventTimer = 0;
+                    }
+                    
+                    // Update status bar
+                    document.getElementById('active-columns').textContent = this.columns.filter(c => c.active).length;
+                    document.getElementById('glitches').textContent = this.glitchPoints.length;
+                    document.getElementById('current-event').textContent = this.events.length > 0 ? this.events[this.events.length - 1].type : 'None';
+                }
+                
+                triggerSpecialEvent() {
+                    const eventTypes = [
+                        'cascade', 'clear', 'glitch_intense', 'speed_up', 'matrix_shift'
+                    ];
+                    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+                    
+                    if (eventType === 'cascade') {
+                        // Create a cascading wave of activation
+                        for (let i = 0; i < this.width; i++) {
+                            if (i % 3 === 0) { // Activate every third column
+                                const column = this.columns[i];
+                                column.active = true;
+                                column.position = -(i % 10); // Staggered start positions
+                                column.speed = 2.5; // Faster speed
+                            }
+                        }
+                    } else if (eventType === 'clear') {
+                        // Clear sections to create visual interest
+                        const clearX = Math.floor(Math.random() * (this.width - 20));
+                        const clearWidth = Math.floor(Math.random() * 20) + 10;
+                        for (let i = clearX; i < Math.min(clearX + clearWidth, this.width); i++) {
+                            this.columns[i].active = false;
+                        }
+                    } else if (eventType === 'glitch_intense') {
+                        // Create many glitches at once
+                        for (let i = 0; i < 10; i++) {
+                            const newGlitch = {
+                                x: Math.floor(Math.random() * this.width),
+                                y: Math.floor(Math.random() * this.height),
+                                width: Math.floor(Math.random() * 27) + 3,
+                                height: Math.floor(Math.random() * 4) + 1,
+                                duration: Math.random() * 0.7 + 0.3,
+                                timer: 0,
+                                shift: Math.floor(Math.random() * 11) - 5
+                            }
+                            this.glitchPoints.push(newGlitch);
+                        }
+                    } else if (eventType === 'speed_up') {
+                        // Temporarily speed up all columns
+                        for (const column of this.columns) {
+                            if (column.active) {
+                                column.speed *= 1.5;
+                            }
+                        }
+                    } else if (eventType === 'matrix_shift') {
+                        // Shift character palettes for visual variety
+                        for (const column of this.columns) {
+                            column.palette = this.getRandomKey(this.palettes);
+                        }
+                    }
+                    
+                    // Add the event to the event log
+                    this.events.push({
+                        type: eventType,
+                        time: Date.now(),
+                        description: `Event triggered: ${eventType}`
+                    });
+                }
+                
+                renderFrame() {
+                    // Clear the canvas
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    
+                    // Calculate wave values for the frequency effect
+                    const waveValues = [];
+                    if (this.frequencyWaves) {
+                        for (let i = 0; i < this.width; i++) {
+                            // Generate complex wave pattern
+                            const wave1 = Math.sin(i * 0.1 + this.waveOffset) * 0.5;
+                            const wave2 = Math.sin(i * 0.05 - this.waveOffset * 0.7) * 0.3;
+                            const wave3 = Math.sin(i * 0.02 + this.waveOffset * 0.3) * 0.2;
+                            const compositeWave = wave1 + wave2 + wave3;
+                            waveValues.push(parseInt((compositeWave + 1) * this.height * 0.5));
+                        }
+                    }
+                    
+                    // Render each column
+                    for (let x = 0; x < this.columns.length; x++) {
+                        const column = this.columns[x];
+                        
+                        if (!column.active) {
+                            continue;
+                        }
+                        
+                        // Calculate wave effect on position
+                        let waveOffset = 0;
+                        if (this.frequencyWaves && x < waveValues.length) {
+                            waveOffset = waveValues[x] * 0.1;
+                        }
+                        
+                        const headPos = Math.floor(column.position + waveOffset);
+                        
+                        // Draw the head of the column (brightest character)
+                        if (headPos >= 0 && headPos < this.height) {
+                            const char = column.chars[0];
+                            this.ctx.fillStyle = `rgba(180, 255, 180, ${column.brightness})`;
+                            this.ctx.font = `bold ${this.fontSize}px monospace`;
+                            this.ctx.fillText(char, x * this.fontSize, headPos * this.fontSize);
+                        }
+                        
+                        // Draw the trailing characters
+                        for (let j = 1; j < column.density && j < column.chars.length; j++) {
+                            const pos = headPos - j;
+                            if (pos >= 0 && pos < this.height) {
+                                const char = column.chars[j % column.chars.length];
+                                
+                                // Calculate brightness based on position in the trail
+                                const brightnessFactor = Math.max(0, 1 - (j / column.density));
+                                
+                                // Different color schemes based on character palette
+                                let color;
+                                if (column.palette === 'kanji') {
+                                    color = `rgba(0, 255, 255, ${brightnessFactor * column.brightness})`;
+                                } else if (column.palette === 'special') {
+                                    color = `rgba(255, 255, 255, ${brightnessFactor * column.brightness})`;
+                                } else {
+                                    color = `rgba(0, ${Math.floor(180 * brightnessFactor + 50)}, 0, ${brightnessFactor * column.brightness})`;
+                                }
+                                
+                                this.ctx.fillStyle = color;
+                                this.ctx.font = `${this.fontSize}px monospace`;
+                                this.ctx.fillText(char, x * this.fontSize, pos * this.fontSize);
+                            }
+                        }
+                    }
+                    
+                    // Apply glitch effects
+                    for (const glitch of this.glitchPoints) {
+                        for (let y = glitch.y; y < Math.min(glitch.y + glitch.height, this.height); y++) {
+                            for (let x = glitch.x; x < Math.min(glitch.x + glitch.width, this.width); x++) {
+                                // Only modify some pixels in the glitch area
+                                if (Math.random() < 0.7) {
+                                    const shiftedX = (x + glitch.shift) % this.width;
+                                    if (shiftedX >= 0 && shiftedX < this.width && y >= 0 && y < this.height) {
+                                        const char = this.specialChars[Math.floor(Math.random() * this.specialChars.length)];
+                                        
+                                        this.ctx.fillStyle = `rgba(255, 50, 50, 0.8)`;
+                                        this.ctx.font = `bold ${this.fontSize}px monospace`;
+                                        this.ctx.fillText(char, shiftedX * this.fontSize, y * this.fontSize);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Render hidden message if active
+                    if (this.currentMessage !== null) {
+                        const charsToShow = Math.min(this.currentMessage.length, Math.floor(this.revealProgress));
+                        
+                        if (charsToShow > 0 && this.messageElement) {
+                            // Update message element with current characters
+                            let messageText = '';
+                            for (let i = 0; i < charsToShow; i++) {
+                                // Flicker effect
+                                if (Math.random() < 0.9) {
+                                    messageText += this.currentMessage[i];
+                                } else {
+                                    messageText += ' ';
+                                }
+                            }
+                            this.messageElement.textContent = messageText;
+                        }
+                    }
+                    
+                    // Update FPS display
+                    const now = performance.now();
+                    const delta = now - this.lastTime;
+                    this.lastTime = now;
+                    
+                    this.frameTimes.push(delta);
+                    if (this.frameTimes.length > 60) {
+                        this.frameTimes.shift();
+                    }
+                    
+                    const fps = Math.round(1000 / (this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length));
+                    document.getElementById('fps').textContent = fps;
+                }
+                
+                simulateDecryption() {
+                    const decryptionOverlay = document.getElementById('decryption-overlay');
+                    const decryptionContent = document.getElementById('decryption-content');
+                    
+                    const lines = [
+                        "INITIALIZING NEURAL INTERFACE...",
+                        "ESTABLISHING SECURE CONNECTION...",
+                        "BYPASSING FIREWALL PROTOCOLS...",
+                        "QUANTUM ENCRYPTION DETECTED...",
+                        "DEPLOYING POLYMORPHIC DECRYPTION ALGORITHMS...",
+                        "MATRIX ENTRY POINT LOCATED...",
+                        "TRAVERSING NETWORK TOPOLOGY...",
+                        "COMPILING BINARY TRANSLATORS...",
+                        "OVERRIDING SECURITY SUBSYSTEMS...",
+                        "LAUNCHING NEURAL MATRIX VISUALIZATION..."
+                    ];
+                    
+                    let currentLine = 0;
+                    let lineComplete = false;
+                    
+                    const appendBinaryLine = () => {
+                        const binaryLine = document.createElement('div');
+                        binaryLine.className = 'binary-line';
+                        binaryLine.textContent = Array(80).fill().map(() => Math.random() < 0.5 ? '0' : '1').join('');
+                        decryptionContent.appendChild(binaryLine);
+                        
+                        // Remove old lines to avoid too many DOM elements
+                        if (decryptionContent.children.length > 15) {
+                            decryptionContent.removeChild(decryptionContent.children[0]);
+                        }
+                    };
+                    
+                    const revealNextLine = () => {
+                        if (currentLine >= lines.length) {
+                            // Decryption animation complete
+                            setTimeout(() => {
+                                decryptionOverlay.style.opacity = '0';
+                                setTimeout(() => {
+                                    decryptionOverlay.style.display = 'none';
+                                    this.startMatrixAnimation();
+                                }, 1000);
+                            }, 1000);
+                            return;
+                        }
+                        
+                        if (!lineComplete) {
+                            const line = document.createElement('div');
+                            line.className = 'decryption-line';
+                            line.style.color = '#0f0';
+                            line.textContent = lines[currentLine];
+                            decryptionContent.appendChild(line);
+                            lineComplete = true;
+                            
+                            setTimeout(() => {
+                                appendBinaryLine();
+                                setTimeout(() => {
+                                    appendBinaryLine();
+                                    setTimeout(() => {
+                                        appendBinaryLine();
+                                        lineComplete = false;
+                                        currentLine++;
+                                        setTimeout(revealNextLine, 300);
+                                    }, 100);
+                                }, 100);
+                            }, 300);
+                        }
+                    };
+                    
+                    // Start the decryption animation
+                    revealNextLine();
+                }
+                
+                startMatrixAnimation() {
+                    // Animation loop
+                    const loop = () => {
+                        // Calculate delta time for smooth animation
+                        const now = performance.now();
+                        const deltaTime = (now - this.lastTime) / 1000;
+                        this.lastTime = now;
+                        
+                        // Update matrix state
+                        this.updateMatrix(deltaTime);
+                        
+                        // Render frame
+                        this.renderFrame();
+                        
+                        // Request next frame
+                        this.animationId = requestAnimationFrame(loop);
+                    };
+                    
+                    // Start the loop
+                    this.lastTime = performance.now();
+                    this.animationId = requestAnimationFrame(loop);
+                }
+                
+                handleKeyPress(e) {
+                    const key = e.key.toLowerCase();
+                    
+                    if (key === 'g') {
+                        this.glitchEnabled = !this.glitchEnabled;
+                    } else if (key === 'w') {
+                        this.frequencyWaves = !this.frequencyWaves;
+                    } else if (key === 'm') {
+                        this.messageReveal = !this.messageReveal;
+                    } else if (key === 'c') {
+                        this.triggerSpecialEvent();
+                    } else if (key === 'q') {
+                        if (this.animationId) {
+                            cancelAnimationFrame(this.animationId);
+                            this.animationId = null;
+                        }
+                    }
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const matrix = new MatrixEngine();
+                matrix.simulateDecryption();
+            });
+        </script>
+    </body>
+</html>
