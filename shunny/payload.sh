@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Title: Matrix Visualization Payload
-# Author: most
+# Author: RRMforLLM
 # Version: 1.0
 # Target: Windows/Linux/macOS
 # Description: Deploys a Matrix-style visual effect on the target computer
